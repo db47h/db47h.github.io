@@ -1,0 +1,546 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <generator uri="https://gohugo.io/" version="0.99.0-DEV">Hugo</generator>
+    <title>db47h&#39;s den</title>
+            <link href="https://db47h.github.io/" rel="alternate" type="text/html" title="HTML" />
+            <link href="https://db47h.github.io/feed.xml" rel="self" type="application/atom+xml" title="Atom" />
+    <updated>2022-05-26T17:48:19+02:00</updated>
+    <id>https://db47h.github.io/</id>
+        <entry>
+            <title>A New Programming Language (Part 1)</title>
+            <link href="https://db47h.github.io/post/cyon-part-1/" rel="alternate" type="text/html"  hreflang="en" />
+            <id>https://db47h.github.io/post/cyon-part-1/</id>
+            <published>2022-05-14T18:42:03+02:00</published>
+            <updated>2022-05-14T18:42:03+02:00</updated>
+            <content type="html">
+                &lt;p&gt;This is the first of a series of posts on implementing a new programming language in Go.&lt;/p&gt;
+&lt;p&gt;Throughout these posts, I will assume that the reader has some basic knowledge on the subject matter. For those new to this topic, I invite you to check out &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;http://craftinginterpreters.com/&#34;
+  
+&gt;Crafting Interpreters&lt;/a&gt; by Robert Nystrom (there&amp;rsquo;s a also free online version of the book). You will learn everything you need to know in order to understand what we&amp;rsquo;ll be doing here.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;some-context&#34;&gt;
+        Some context
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#some-context&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Some context&#34; href=&#34;#some-context&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;This is really a case of yak shaving&lt;sup id=&#34;fnref:1&#34;&gt;&lt;a href=&#34;#fn:1&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;1&lt;/a&gt;&lt;/sup&gt;. Let&amp;rsquo;s just say that I&amp;rsquo;ve always had a thing for programmable scientific calculators, and I haven&amp;rsquo;t found any mobile phone application that does just that with a decent user experience. At least not on Android, and in terms of UX, emulators for actual devices, most of which being only of archaeological value&lt;sup id=&#34;fnref:2&#34;&gt;&lt;a href=&#34;#fn:2&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;2&lt;/a&gt;&lt;/sup&gt;, just don&amp;rsquo;t cut it.&lt;/p&gt;
+&lt;p&gt;The closest I could find is the HP Prime emulator&lt;sup id=&#34;fnref:3&#34;&gt;&lt;a href=&#34;#fn:3&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;3&lt;/a&gt;&lt;/sup&gt;. However, despite the actual touch screen of the real thing, it&amp;rsquo;s only an emulator and the UX is pretty poor compared to what should be achievable on a mobile phone.&lt;/p&gt;
+&lt;p&gt;So here we are, I want to build a programmable scientific calculator app and I need a programming language for it. Also, this will be a purely numerical platform, I do not need a computer algebra system or even symbolic math capabilities. Since I have not found an existing language that suits my needs and I&amp;rsquo;ve been itching to implement a programming language for a while, time to make one!&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;the-cyon-language&#34;&gt;
+        The Cyon language
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#the-cyon-language&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor The Cyon language&#34; href=&#34;#the-cyon-language&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;The tentative name for the app itself is Procyon, so I figured&amp;hellip; Yeah, I&amp;rsquo;m the most creative person. And Yak was already taken.&lt;/p&gt;
+&lt;p&gt;Let&amp;rsquo;s start with a brief aside on what I envision for the app UI and user experience.&lt;/p&gt;
+&lt;p&gt;The app will present the user with a classical layout: a (soft) keyboard in the lower portion of the screen and the display in the upper portion. The lower part of the keyboard will be static with the usual 4 to 5 rows x 5 columns with the essential keys for number entry, basic arithmetic and &lt;kbd&gt;Enter&lt;/kbd&gt; keys, while the upper half (3-4 rows of 6 keys) will change dynamically based on context. The user should also be able to switch to a full alpha keyboard with gestures or something like that. The key idea here is that whatever the user is doing, anything they might need should be only one to two key presses away. In programming mode, this should include all syntactic elements, keywords, a shorthand for the local scope&amp;rsquo;s variables as well (some auto-completion mechanism for longer identifiers and built-ins will go on the display part directly). The default UI should just be a REPL for the language itself.&lt;/p&gt;
+&lt;p&gt;Here are my requirements for the language:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;beginner friendly&lt;/li&gt;
+&lt;li&gt;implicit multiplication: &lt;code&gt;3(x+2)&lt;/code&gt; should be seen as &lt;code&gt;3×(x+2)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;a syntax that feels natural for maths: a basic function definition should be as simple as &lt;code&gt;f(x) = 2x+3&lt;/code&gt; with no weird syntax for the absolute neophyte.&lt;/li&gt;
+&lt;li&gt;dynamically typed with native support for decimal floats, complex numbers, matrices, (hash)maps and strings.&lt;/li&gt;
+&lt;li&gt;garbage collected&lt;/li&gt;
+&lt;li&gt;compact syntax because of the small screen estate (30 columns of display at best, for readability and ease of interaction for editing purposes)&lt;/li&gt;
+&lt;li&gt;&lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://en.wikipedia.org/wiki/First-class_function&#34;
+  
+&gt;first class functions&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Here is a quick example of what I want the language to look like:&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;# this is a comment
+
+# simple function definition
+f(x) = 2x^2 + 3x - 7
+
+# higher order function example
+deriv(f@, x) =
+    h = 10^-34
+    = (f(x+h) - f(x)) / h
+
+f(2)         # = 7
+deriv(f, 2)  # ≈ 11
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Note that we use indentation to define code blocks. I would have preferred actual delimiters for code blocks, but I went with identation for three reasons:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;small screen estate: indentation does not require a closing token (like &lt;code&gt;endif&lt;/code&gt;, &lt;code&gt;end&lt;/code&gt;, or &lt;code&gt;}&lt;/code&gt;) thus reducing the line count.&lt;/li&gt;
+&lt;li&gt;we&amp;rsquo;re short on grouping symbols. As we&amp;rsquo;ll see later, I had to use &lt;code&gt;{}&lt;/code&gt; for indexing. Using it for code blocks would lead to ambiguous situations like &lt;code&gt;if cond { do_stuff }&lt;/code&gt; forcing us to enclose &lt;code&gt;if&lt;/code&gt; conditions in parentheses, which is not desirable.&lt;/li&gt;
+&lt;li&gt;we want to keep the amount of keywords to a minimum, so no &lt;code&gt;do&lt;/code&gt; - &lt;code&gt;end&lt;/code&gt; constructs.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;What follows a draft of the language specification and it will very likely change with experimentation and user feedback. Also, I do not mind adding complexity to the compiler or interpreter as long as it makes for a better user experience.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;implicit-multiplication-and-its-implications&#34;&gt;
+        Implicit multiplication and its implications
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#implicit-multiplication-and-its-implications&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Implicit multiplication and its implications&#34; href=&#34;#implicit-multiplication-and-its-implications&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;Implicit multiplication can lead to ambiguous code, both for the user and for the parser. Here are a few of the challenges it poses and the adopted solutions, where I tried to make things as simple as possible for the user.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;function-application-vs-multiplication&#34;&gt;
+        Function application vs. multiplication
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#function-application-vs-multiplication&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Function application vs. multiplication&#34; href=&#34;#function-application-vs-multiplication&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;My initial plan was to have only anonymous functions and make &lt;code&gt;f(x) = foo&lt;/code&gt; syntactic sugar for &lt;code&gt;f = x -&amp;gt; foo&lt;/code&gt; where &lt;code&gt;x -&amp;gt; foo&lt;/code&gt; is the anonymous function. The problem with that is that the type of &lt;code&gt;f&lt;/code&gt; would be only be known at runtime, thus making implicit multiplication ambiguous in expressions such as &lt;code&gt;f(x+1)&lt;/code&gt;. This could be either &lt;code&gt;f × (x+1)&lt;/code&gt; or a call to function &lt;code&gt;f&lt;/code&gt; with &lt;code&gt;x+1&lt;/code&gt; as its argument (function application).&lt;/p&gt;
+&lt;p&gt;Checking at runtime if the value of &lt;code&gt;f&lt;/code&gt; is a function or some numeric type is a bad idea because of operator precedence. If we consider the expression &lt;code&gt;f(x+1)^3&lt;/code&gt;, and &lt;code&gt;f&lt;/code&gt; is a function, this must be executed as &lt;code&gt;(f(x+1))^3&lt;/code&gt;, but if &lt;code&gt;f&lt;/code&gt; is a number, this must be executed as &lt;code&gt;f*((x+1)^3)&lt;/code&gt;, thus changing the AST dynamically. Likewise, &lt;code&gt;a(2)a(4)&lt;/code&gt; could be &lt;code&gt;((a*2)*a)*4&lt;/code&gt; or &lt;code&gt;(a(2))*(a(4))&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The solution I went for is to turn &lt;code&gt;f(x) = foo&lt;/code&gt; into a static function declaration. &lt;code&gt;f&lt;/code&gt; becomes statically typed, so from the compiler&amp;rsquo;s point of view the expression &lt;code&gt;f(x+1)&lt;/code&gt; is a function call. This also allows the compiler to bind &lt;code&gt;f&lt;/code&gt; statically.&lt;/p&gt;
+&lt;p&gt;This does not solve the issue for higher order functions however. Suppose a higher order function like:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;inverse(f, x) = 1/f(x)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The function parameter &lt;code&gt;f&lt;/code&gt; is dynamically typed, so &lt;code&gt;f(i)&lt;/code&gt; is ambiguous again. One solution to this is to introduce an explicit function application operator, but since we&amp;rsquo;ve already introduced static typing for functions, I belive that the most elegant way to do this is to add a type-hint mechanism. We do this by adding a &lt;code&gt;@&lt;/code&gt; suffix&lt;sup id=&#34;fnref:4&#34;&gt;&lt;a href=&#34;#fn:4&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;4&lt;/a&gt;&lt;/sup&gt; to the identifier, either in its declaration (i.e. the function parameter name or first assignment), or at the call site:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;inverse(f@, x) = 1/f(x)
+inverse(f, x) = 1/f@(x)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Allowing the suffix at the call site simplifies the use of functions as values in tuples or maps:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;add2(x) = x+2
+add4(x) = x+4
+fns = (add2: add2, add4: add4)
+fns.add2@(1)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Without this, we would have to use a temp variable &lt;code&gt;t@ = fns.add2&lt;/code&gt;, then call it, or write a wrapper function. While Cyon is definitely not designed with OOP in mind, this is still a nice option to have.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;array-indexing&#34;&gt;
+        Array indexing
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#array-indexing&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Array indexing&#34; href=&#34;#array-indexing&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;Another issue with implicit multiplication is that using the commonly used&lt;code&gt;[]&lt;/code&gt; both as a delimiter for matrixes and array indexing is ambiguous. &lt;code&gt;a[1,2]&lt;/code&gt; could be either &lt;code&gt;a×[1,2]&lt;/code&gt; or cell at line 2, column 3 of matrix &lt;code&gt;a&lt;/code&gt;. The priority for Cyon is to keep &lt;code&gt;[]&lt;/code&gt; for vectors and matrices, and since parentheses are not an option here, we&amp;rsquo;re left with curly braces for indexing &lt;code&gt;{}&lt;/code&gt;.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;data-types&#34;&gt;
+        Data types
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#data-types&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Data types&#34; href=&#34;#data-types&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;Cyon is dynamically typed and garbage collected. While dynamic typing is not necessarily beginner friendly, the main reason for it is that it makes for less verbose code in most situations.&lt;/p&gt;
+&lt;p&gt;The following EBNF productions will be used throughout of this section as building blocks for literals:&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; class=&#34;chroma&#34;&gt;&lt;code class=&#34;language-ebnf&#34; data-lang=&#34;ebnf&#34;&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;letter        &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;unicode_letter &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;decimal_digit &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;1&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;2&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;3&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;4&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;5&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;6&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;7&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;8&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;9&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;binary_digit  &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;1&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;octal_digit   &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;1&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;2&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;3&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;4&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;5&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;6&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;7&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;hex_digit     &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;A&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;B&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;C&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;D&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;E&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;F&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;a&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;b&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;c&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;d&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;e&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;f&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;integers&#34;&gt;
+        Integers
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#integers&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Integers&#34; href=&#34;#integers&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;An integer is any integer number, with up to 2^32-1 digits of precision.&lt;/p&gt;
+&lt;p&gt;For integer literals, the prefixes &lt;code&gt;0b&lt;/code&gt;, &lt;code&gt;Oo&lt;/code&gt; and &lt;code&gt;0x&lt;/code&gt; may be used to set the base to binary, octal or hexadecimal respectively. These prefixes should not interfere with implicit multiplication. Underscore characters &lt;code&gt;_&lt;/code&gt; may be used to separate digits for readbility.&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; class=&#34;chroma&#34;&gt;&lt;code class=&#34;language-ebnf&#34; data-lang=&#34;ebnf&#34;&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;int_lit        &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_lit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;binary_lit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;octal_lit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;hex_lit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;decimal_lit    &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;(&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;1&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;2&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;3&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;4&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;5&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;6&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;7&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;8&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;9&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;)&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;binary_lit     &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;(&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;b&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;B&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;)&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;binary_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;octal_lit      &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;o&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;O&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;octal_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;hex_lit        &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;0&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;(&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;x&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;X&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;)&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;hex_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;decimal_digits &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;{&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;}&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;binary_digits  &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;binary_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;{&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;binary_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;}&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;octal_digits   &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;octal_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;{&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;octal_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;}&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;hex_digits     &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;hex_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;{&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;_&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;hex_digit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;}&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;pre&gt;&lt;code&gt;x = 1234567890122546879513216547896516
+print(x+1) // prints 1234567890122546879513216547896517
+&lt;/code&gt;&lt;/pre&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;decimal-floating-point&#34;&gt;
+        Decimal floating point
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#decimal-floating-point&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Decimal floating point&#34; href=&#34;#decimal-floating-point&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;Floating point numbers encoded in binary form, as used in most programming languages, are not well suited for a calculator for the sole reason that simple decimals like 0.1 cannot be encoded accurately with binary floats. Doing simple maths eventually &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://go.dev/play/p/-hl7zzAp8Fw&#34;
+  
+&gt;drifts irremediably&lt;/a&gt; from the actual exact result. Sure one could clamp the displayed significant digits to 2 and get away with it. Only for a while.&lt;/p&gt;
+&lt;p&gt;Cyon uses IEEE-754 decimal floating point&lt;sup id=&#34;fnref:5&#34;&gt;&lt;a href=&#34;#fn:5&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;5&lt;/a&gt;&lt;/sup&gt; where numbers are encoded as &lt;code&gt;sign × mantissa × 10^exponent&lt;/code&gt; where &lt;code&gt;sign&lt;/code&gt; is 1 or -1, &lt;code&gt;mantissa ∈ [0,1)&lt;/code&gt; and &lt;code&gt;exponent ∈ [-2147483648, 2147483647]&lt;/code&gt;. By default, the precision is 34 decimal digits but can be extended (how to do so is yet to be determined).&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; class=&#34;chroma&#34;&gt;&lt;code class=&#34;language-ebnf&#34; data-lang=&#34;ebnf&#34;&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;float_lit         &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_float_lit &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;decimal_float_lit &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digits &lt;/span&gt;&lt;span class=&#34;s2&#34;&gt;&amp;#34;.&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_exponent &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;                    &lt;span class=&#34;k&#34;&gt;decimal_digits decimal_exponent &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;|&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;                    &lt;span class=&#34;s2&#34;&gt;&amp;#34;.&amp;#34;&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_exponent &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class=&#34;line&#34;&gt;&lt;span class=&#34;cl&#34;&gt;&lt;span class=&#34;k&#34;&gt;decimal_exponent  &lt;/span&gt;&lt;span class=&#34;o&#34;&gt;=&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;(&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;e&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;E&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;)&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;[&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;+&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;|&lt;/span&gt; &lt;span class=&#34;s2&#34;&gt;&amp;#34;-&amp;#34;&lt;/span&gt; &lt;span class=&#34;p&#34;&gt;]&lt;/span&gt; &lt;span class=&#34;k&#34;&gt;decimal_digits &lt;/span&gt;&lt;span class=&#34;p&#34;&gt;.&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;pre&gt;&lt;code&gt;x = 1.2
+y = 1.17e27
+&lt;/code&gt;&lt;/pre&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;complex-numbers&#34;&gt;
+        Complex numbers
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#complex-numbers&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Complex numbers&#34; href=&#34;#complex-numbers&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;The identifiers &lt;code&gt;𝒊&lt;/code&gt; (U+1D48A) and &lt;code&gt;_i&lt;/code&gt;&lt;sup id=&#34;fnref:6&#34;&gt;&lt;a href=&#34;#fn:6&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;6&lt;/a&gt;&lt;/sup&gt; are constants both representing the complex number &lt;code&gt;i&lt;/code&gt;. A complex number is simply written as &lt;code&gt;real + imag × 𝒊&lt;/code&gt; where the real and imaginary part are decimal floating point:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;x = 1 + 2_i
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;is the same as:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;x = 1 + 2𝒊
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And &lt;code&gt;x_i&lt;/code&gt; is &lt;code&gt;x × 𝒊&lt;/code&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;print(x_i) # prints -2+𝒊
+print(x𝒊)  # prints -2+𝒊
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;TODO: we cannot have 𝒊 has part of an identifier.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;strings&#34;&gt;
+        Strings
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#strings&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Strings&#34; href=&#34;#strings&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;Same as dobule-quoted Go strings. No support for backtick delimiters.&lt;/p&gt;
+&lt;p&gt;TODO: Develop&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;tuples&#34;&gt;
+        Tuples
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#tuples&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Tuples&#34; href=&#34;#tuples&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;pre&gt;&lt;code&gt;()                      # empty tuple
+(three, element, tuple)
+(x)                     # not a tuple
+(x,)                    # single element tuple
+t := (42,1); print t.0  # prints 42
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Parentheses not needed except for the empty tuple.&lt;/p&gt;
+&lt;p&gt;TODO: concatenation op. Need &lt;code&gt;1 . (1, 2) =&amp;gt; (1, 2, 3)&lt;/code&gt; and &lt;code&gt;(1, 2) . (3, 4) =&amp;gt; (1, 2, 3, 4)&lt;/code&gt;. Which means &lt;code&gt;((1, 2), ) . (3, 4)&lt;/code&gt; =&amp;gt; &lt;code&gt;( 1, 2, 3, 4)&lt;/code&gt;? Better semantics with &lt;code&gt;(1,) . (2, 3) =&amp;gt; (1, 2, 3)&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;TODO: talk about operator rules for &lt;code&gt;scalar op (tuple)&lt;/code&gt;, &lt;code&gt;(tuple) op (tuple)&lt;/code&gt;, &lt;code&gt;op (tuple)&lt;/code&gt;&amp;hellip;&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;matrixes&#34;&gt;
+        Matrixes
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#matrixes&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Matrixes&#34; href=&#34;#matrixes&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;A matrix literal is surrounded by square brackets, values in the same row are separated by a comma, and rows are separated by semi-colons:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;vec := [1; 2; 4; x] # column vector
+M := [ 1, 2, 3;
+       3, 4, 7;
+      -2, 1, 3 ]
+empty_Mat := []
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Matrix cells can only contain numbers. For a generic purpose array-like construct, use tuples.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;maps&#34;&gt;
+        Maps
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#maps&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Maps&#34; href=&#34;#maps&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;pre&gt;&lt;code&gt;foo := (a: 42, b: 163)
+bar := (&amp;quot;more complex key&amp;quot;: &amp;quot;string value&amp;quot;, foo: &amp;quot;not foo above&amp;quot;)
+
+print foo{&amp;quot;a&amp;quot;}
+print foo.a
+print bar{&amp;quot;more complex key&amp;quot;}
+bar{&amp;quot;newkey&amp;quot;} = value
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;TODO: develop&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;ranges&#34;&gt;
+        Ranges
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#ranges&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Ranges&#34; href=&#34;#ranges&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;pre&gt;&lt;code&gt;1..5 // shortcut for (1, 2, 3, 4, 5) but internally uses less memory
+&lt;/code&gt;&lt;/pre&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h3 id=&#34;functions&#34;&gt;
+        Functions
+    &lt;/h3&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#functions&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Functions&#34; href=&#34;#functions&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;TODO: Develop this and limit lambdas to one liners =&amp;gt; less messy syntax.&lt;/p&gt;
+&lt;p&gt;Functions are first class values.&lt;/p&gt;
+&lt;p&gt;Formal function declaration:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;f(x) = 3x+7
+g(x) = f(x) - 7
+f(2)  # 13
+g(2)  # 6
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Anonymous functions:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;a = x -&amp;gt; 2x
+a.(2)
+adder(v) =
+    obj = {}
+    obj = { &amp;quot;value&amp;quot;: v, &amp;quot;add&amp;quot;: n -&amp;gt; obj.v + n }
+    return obj
+a = adder(2)
+a.add.(4) # 6
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Functions not declared using the form &lt;code&gt;func_name(args) = func_body&lt;/code&gt; must be called using the explicit function application syntax &lt;code&gt;identifier.(args)&lt;/code&gt;. For more information, see the section about implicit multiplication and its implications.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;type-coercion&#34;&gt;
+        Type coercion
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#type-coercion&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Type coercion&#34; href=&#34;#type-coercion&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;When an operator has operands of different types, one of the operands is converted so that there is as little information loss as possible. That is integers are converted to floats and floats to complex numbers as needed. Also, the division operator will convert integers to floats before performing the division. For integer division, one should use the integer division operator instead (&lt;code&gt;\&lt;/code&gt;). Any built-in function that might return a float, like transcendental functions and nth-root, will convert integer arguments to floats as well.&lt;/p&gt;
+&lt;p&gt;The goal is not to make for self-optimizing code, but to make type coercion more intuitive for the user.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;expressions&#34;&gt;
+        Expressions
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#expressions&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Expressions&#34; href=&#34;#expressions&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;I wanted Cyon to feel functional whenever dealing with pure maths functions (one-liners), but take a more procedural&lt;sup id=&#34;fnref:7&#34;&gt;&lt;a href=&#34;#fn:7&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;7&lt;/a&gt;&lt;/sup&gt; approach as soon as control flow is required. As a result Cyon has both statements and expressions (and a proper ternary operator, reusing &lt;code&gt;if&lt;/code&gt; and &lt;code&gt;else&lt;/code&gt; like in Python).&lt;/p&gt;
+&lt;p&gt;Cyon supports the standard binary operators for addition, subtraction, &amp;hellip;&lt;/p&gt;
+&lt;p&gt;TODO&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;statements&#34;&gt;
+        Statements
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#statements&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Statements&#34; href=&#34;#statements&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;TODO&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;constants&#34;&gt;
+        Constants
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#constants&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Constants&#34; href=&#34;#constants&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;Cyon has two built-in constants:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;𝒊&lt;/code&gt; (U+1D48A): the complex number &lt;code&gt;i&lt;/code&gt;. This is meant for use on devices with a dedicated keyboard.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;_i&lt;/code&gt;: the complex number i.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;A number of physical constants will be added later, but these will be prefixed with an underscore (like &lt;code&gt;_c&lt;/code&gt; for the speed of light) and &lt;code&gt;_&lt;/code&gt; is not otherwise allowed in identifier names so that adding new constants will not break existing code. Although I have no plans to add support for units, this could also be a way to implement it.&lt;/p&gt;
+&lt;p&gt;User defined constants are not supported yet, but this is something I&amp;rsquo;m considering and it will probably use the same prefix mechanism instead of introducing a new keyword.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;true-and-false&#34;&gt;
+        True and false
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#true-and-false&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor True and false&#34; href=&#34;#true-and-false&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;There is no actual boolean datatype. A boolean expression like &lt;code&gt;a &amp;gt; b&lt;/code&gt; will result in the integer value -1 if true, 0 otherwise. Complex boolean expressions can be build by combining basic boolean expressions with the bitwise operators &lt;code&gt;|&lt;/code&gt; for &lt;code&gt;or&lt;/code&gt;, &lt;code&gt;&amp;amp;&lt;/code&gt; for and, &lt;code&gt;~&lt;/code&gt; for not. For example:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;if (c &amp;gt;= 65) &amp;amp; (c &amp;lt; 65+26):
+    # do stuff
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Ultimately, when an expression is converted as true or false (like in an &lt;code&gt;if&lt;/code&gt; statement), the following rules apply:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Data type&lt;/th&gt;
+&lt;th&gt;Boolean value&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;number&lt;/td&gt;
+&lt;td&gt;n ≠ 0&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;string, tuple, matrix, map&lt;/td&gt;
+&lt;td&gt;len(v) ≠ 0&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;function&lt;/td&gt;
+&lt;td&gt;error&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;There are no &lt;code&gt;true&lt;/code&gt; or &lt;code&gt;false&lt;/code&gt; keywords, use -1 and 0 instead.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;variables-and-lexical-scoping&#34;&gt;
+        Variables and lexical scoping
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#variables-and-lexical-scoping&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Variables and lexical scoping&#34; href=&#34;#variables-and-lexical-scoping&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;TODO: talk about identifier names (what&amp;rsquo;s allowed and not, like &lt;code&gt;_&lt;/code&gt;)&lt;/p&gt;
+&lt;p&gt;While I&amp;rsquo;m strongly in favor of mandatory identifier declaration and lexical scoping like in Go, some desired features for the language prevent us to do so. For example, we want simple function declarations using the &lt;code&gt;=&lt;/code&gt; sign:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;f(x) = x^3 - 2x^2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This prevents us from using Go-style declarations, using for example &lt;code&gt;:=&lt;/code&gt;, as well as a pure lexical scoping. Using &lt;code&gt;=&lt;/code&gt; for functions and &lt;code&gt;:=&lt;/code&gt; for variables would not be consistent, so we&amp;rsquo;re left with &lt;code&gt;=&lt;/code&gt; as the sole means of variable declaration and assignment. Let&amp;rsquo;s use another example to illustrate variable scope:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;fact(n) = 
+    p = 1
+    iter(n) = 
+        if n &amp;lt;= 1:
+            return p
+        p = p*n
+        return iter(n-1)
+    return iter(n)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;fact&lt;/code&gt; is just the classical recursive factorial that is modified to allow &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://en.wikipedia.org/wiki/Tail_call#Example_programs&#34;
+  
+&gt;tail call&lt;/a&gt; optimization. In this (non-working) example the programmer&amp;rsquo;s intent is clearly to have &lt;code&gt;p&lt;/code&gt; and &lt;code&gt;iter&lt;/code&gt; defined only within the scope of &lt;code&gt;fact&lt;/code&gt;. We also want &lt;code&gt;iter&lt;/code&gt; to be a closure capturing &lt;code&gt;p&lt;/code&gt;. So if we follow with the same logic, the assignment &lt;code&gt;p = p*n&lt;/code&gt; should in fact declare a &lt;code&gt;p&lt;/code&gt; that is local to &lt;code&gt;iter&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;If we tried the same in Python (which has similar scoping rules), this example would fail with an error:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;UnboundLocalError: local variable &amp;lsquo;p&amp;rsquo; referenced before assignment&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;This is the correct behavior: &lt;code&gt;p*n&lt;/code&gt; is evaluated first, using &lt;code&gt;p&lt;/code&gt; declared in &lt;code&gt;fact&lt;/code&gt; and then try to assign it to a &lt;code&gt;p&lt;/code&gt; local to &lt;code&gt;iter&lt;/code&gt;. To work around this, Python has the &lt;code&gt;nonlocal&lt;/code&gt; statement. This is just too long and verbose for Cyon. The most compact and unambiguous way I&amp;rsquo;ve found to explicitely indicate the intent of modifing a non local variable is to add it to the function&amp;rsquo;s parameter list, but separating it from other parameters with a semicolon:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;iter(n; p) = ...
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This extends the formal function definition syntax to (in pseudo EBNF):&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;func_def   = identifier &#39;(&#39; [args] [&#39;;&#39; bound_vars] &#39;)&#39; &#39;=&#39; function_body
+args       = identifier { &#39;,&#39; identifier }
+bound_vars = identifier { &#39;,&#39; identifier }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;TL;DR&lt;/strong&gt;: Function and variables are bound at the function level. Their names are looked up in the current function&amp;rsquo;s bound variables: function arguments and explicitly bound names from the enclosing scope, explicitly initialized variables and local functions. If that fails, the search continues recursively in the enclosing scopes (free variables).&lt;/p&gt;
+&lt;p&gt;When a variable is first assigned within a function:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;If the variable is a free variable (i.e. from an implicit closure) and was referenced before assignment: error, suggesting an explicit closure&lt;/li&gt;
+&lt;li&gt;If the variable is not bound yet, bind it in the current function&lt;/li&gt;
+&lt;li&gt;Regular assignment&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;operator-precedence&#34;&gt;
+        Operator precedence
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#operator-precedence&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Operator precedence&#34; href=&#34;#operator-precedence&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;From highest precedence, to lowest:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Precedence&lt;/th&gt;
+&lt;th&gt;Operator&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;function call&lt;/td&gt;
+&lt;td&gt;(&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;index op&lt;/td&gt;
+&lt;td&gt;. {&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;exponentiation&lt;/td&gt;
+&lt;td&gt;^ !&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;product&lt;/td&gt;
+&lt;td&gt;*  /  \ %  &amp;laquo;  &amp;raquo;  &amp;amp;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;addition&lt;/td&gt;
+&lt;td&gt;+  -  |  ~&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;comparison&lt;/td&gt;
+&lt;td&gt;==  !=  &amp;lt;  &amp;lt;=  &amp;gt;  &amp;gt;=&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;concatenation&lt;/td&gt;
+&lt;td&gt;, ;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;anon function&lt;/td&gt;
+&lt;td&gt;-&amp;gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;assignment&lt;/td&gt;
+&lt;td&gt;=&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Note that the compiler uses a top-down operator precedence parser&lt;sup id=&#34;fnref:8&#34;&gt;&lt;a href=&#34;#fn:8&#34; class=&#34;footnote-ref&#34; role=&#34;doc-noteref&#34;&gt;8&lt;/a&gt;&lt;/sup&gt;, where the tokens &amp;lsquo;(&amp;rsquo; and &amp;lsquo;{&amp;rsquo; are infix operators. Also note that there are no boolean operators, only bitwise operators.&lt;/p&gt;
+&lt;div class=&#34;gblog-post__anchorwrap flex align-center&#34;&gt;
+    &lt;h2 id=&#34;ternary-op&#34;&gt;
+        Ternary op
+    &lt;/h2&gt;
+    &lt;a data-clipboard-text=&#34;https://db47h.github.io/post/cyon-part-1/#ternary-op&#34; class=&#34;gblog-post__anchor gblog-post__anchor--right clip&#34; aria-label=&#34;Anchor Ternary op&#34; href=&#34;#ternary-op&#34;&gt;
+        &lt;svg class=&#34;gblog-icon gblog_link&#34;&gt;&lt;use xlink:href=&#34;#gblog_link&#34;&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;/a&gt;
+&lt;/div&gt;
+&lt;p&gt;We reuse the &lt;code&gt;if&lt;/code&gt; and &lt;code&gt;else&lt;/code&gt; keywords:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;x = value if cond else other_value
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;else&lt;/code&gt; is mandatory.&lt;/p&gt;
+&lt;p&gt;TODO: free variables in a function are not mutable. While this is probably trivial for most data types, we should be careful with library functions that mutate things like maps and tuples (i.e. make sure that no library function mutates a value). Also when doing &lt;code&gt;foo{x} = value&lt;/code&gt; apply the same rules as for &lt;code&gt;foo = value&lt;/code&gt;, i.e. if foo is not in the current scope, error.&lt;/p&gt;
+&lt;p&gt;TODO: the above rule might be problematic if we want dynamically sizable matrices. Need a way to get that.&lt;/p&gt;
+&lt;div class=&#34;footnotes&#34; role=&#34;doc-endnotes&#34;&gt;
+&lt;hr&gt;
+&lt;ol&gt;
+&lt;li id=&#34;fn:1&#34;&gt;
+&lt;p&gt;&lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://en.wiktionary.org/wiki/yak_shaving&#34;
+  
+&gt;https://en.wiktionary.org/wiki/yak_shaving&lt;/a&gt; and &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://yakshav.es/the-patron-saint-of-yakshaves/&#34;
+  
+&gt;https://yakshav.es/the-patron-saint-of-yakshaves/&lt;/a&gt;&amp;#160;&lt;a href=&#34;#fnref:1&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:2&#34;&gt;
+&lt;p&gt;Worth mentioning at this is &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://thomasokken.com/plus42/&#34;
+  
+&gt;Plus42&lt;/a&gt; which started as an emulator for the HP-42s and has evolved far beyond the capabilities of the original hardware. The RPN buffs should definitely check it out, the desktop version is free and open-source and makes for an excellent desktop calculator.&amp;#160;&lt;a href=&#34;#fnref:2&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:3&#34;&gt;
+&lt;p&gt;Dirt cheap compared to the actual device. Hats down to HP for releasing this app BTW.&amp;#160;&lt;a href=&#34;#fnref:3&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:4&#34;&gt;
+&lt;p&gt;Some variants of BASIC (the good ones, not VB) were staticaly typed and used suffixes to indicate a variable&amp;rsquo;s type.&amp;#160;&lt;a href=&#34;#fnref:4&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:5&#34;&gt;
+&lt;p&gt;There are other alternatives to decimal floating point, like &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://dl.acm.org/doi/abs/10.1145/3385412.3386037&#34;
+  
+&gt;Recursive Real Arithmetic&lt;/a&gt; as used in the default Android calculator, but there are issues that make it impractical in a programming language.&amp;#160;&lt;a href=&#34;#fnref:5&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:6&#34;&gt;
+&lt;p&gt;We cannot simply use the form &lt;code&gt;1+2i&lt;/code&gt; like in Go because of implicit multiplication. I thought about making &lt;code&gt;i&lt;/code&gt; a constant, but that would prevent the user from using it as a variable. The app will have a dedicated &lt;code&gt;𝒊&lt;/code&gt; key, so this is not really an issue, and on desktop, using &lt;code&gt;_i&lt;/code&gt; instead is not too much of a burden in a text editor, and on the desktop version of the app, we could map &lt;code&gt;𝒊&lt;/code&gt; to something like &lt;kbd&gt;Alt&lt;/kbd&gt;+&lt;kbd&gt;i&lt;/kbd&gt;.&amp;#160;&lt;a href=&#34;#fnref:6&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:7&#34;&gt;
+&lt;p&gt;While there are valid arguments for both functional and procedural languages as starter languages, I belive that purely functional languages are not well suited for a scientific calculator (immutability would be an issue).&amp;#160;&lt;a href=&#34;#fnref:7&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&#34;fn:8&#34;&gt;
+&lt;p&gt;Also known as a &lt;a
+  class=&#34;gblog-markdown__link&#34;
+  href=&#34;https://en.wikipedia.org/wiki/Operator-precedence_parser#Pratt_parsing&#34;
+  
+&gt;Pratt Parser&lt;/a&gt;&amp;#160;&lt;a href=&#34;#fnref:8&#34; class=&#34;footnote-backref&#34; role=&#34;doc-backlink&#34;&gt;&amp;#x21a9;&amp;#xfe0e;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;
+            </content>  
+        </entry>
+</feed>
